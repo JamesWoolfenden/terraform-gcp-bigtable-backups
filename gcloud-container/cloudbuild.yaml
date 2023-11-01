@@ -1,0 +1,7 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    script: |
+      docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/pike/backup:latest .
+    automapSubstitutions: true
+images:
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/pike/backup:latest"
