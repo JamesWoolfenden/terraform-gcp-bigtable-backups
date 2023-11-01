@@ -50,7 +50,7 @@ No requirements.
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 5.4.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | n/a |
 
 ## Modules
 
@@ -93,7 +93,17 @@ resource "google_project_iam_custom_role" "terraform_pike" {
   title       = "terraform_pike"
   description = "A user with least privileges"
   permissions = [
-    "resourcemanager.projects.get"
+    "cloudscheduler.jobs.create",
+    "cloudscheduler.jobs.delete",
+    "cloudscheduler.jobs.enable",
+    "cloudscheduler.jobs.get",
+    "cloudscheduler.jobs.update",
+    "resourcemanager.projects.get",
+    "run.jobs.create",
+    "run.jobs.delete",
+    "run.jobs.get",
+    "run.jobs.update",
+    "run.operations.get"
   ]
 }
 
