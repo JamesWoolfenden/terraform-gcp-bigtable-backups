@@ -27,7 +27,7 @@ module "bigtable-backups" {
     pike="permissions"
   }
   region            = "us-central1"
-  project_id        = "pike-gcp"
+  project_id        = "pike-477416"
 }
 ```
 
@@ -88,7 +88,7 @@ The Terraform resource required is:
 ```golang
 
 resource "google_project_iam_custom_role" "terraform_pike" {
-  project     = "pike"
+  project     = "pike-412922"
   role_id     = "terraform_pike"
   title       = "terraform_pike"
   description = "A user with least privileges"
