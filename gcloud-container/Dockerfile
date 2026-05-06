@@ -1,4 +1,4 @@
-FROM gcr.io/google.com/cloudsdktool/cloud-sdk:slim@sha256:b28b90df3f3125630c263312a5f7e3d92f345c93039eae058cf144892dee1840
+FROM gcr.io/google.com/cloudsdktool/cloud-sdk:slim@sha256:42d0af3434d40a895da768a87001b87938c3ff2a0f16c81a00e78b857b75b611
 
 ARG project
 ENV project=${project}

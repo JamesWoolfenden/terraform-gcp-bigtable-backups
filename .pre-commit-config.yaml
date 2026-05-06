@@ -41,7 +41,7 @@ repos:
         - id: tf2docs
           language_version: python3.11
       repo: https://github.com/jameswoolfenden/pre-commit
-      rev: c8e6311b03b81f878d57c49f3f76327514a76352 # v0.1.56
+      rev: 4997cf8b63896568143d5c6e820741214bc9f314 # v0.1.61
     - hooks:
         - id: checkov
           entry: checkov -d example/examplea --external-checks-dir checkov --download-external-modules true --compact
@@ -73,4 +73,4 @@ repos:
             - -d
             - .
       repo: https://github.com/jameswoolfenden/ghat
-      rev: 39564606bb33ecaae4a339a36d6184fbc71df734 # v0.1.26
+      rev: c037c5f7bbc8670607523ea6a7aefd978fc0bd7d # v0.1.27
