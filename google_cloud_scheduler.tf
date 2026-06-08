@@ -1,5 +1,5 @@
 resource "google_cloud_scheduler_job" "backup" {
-  name             = "backup-scheduler-trigger"
+  name             = "${var.job_name}-scheduler"
   attempt_deadline = "180s"
   description      = "backup scheduler"
   schedule         = var.schedule

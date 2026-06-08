@@ -74,6 +74,7 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID in which all resources are created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | GCP region in which the Cloud Run job and Cloud Scheduler job are created, e.g. "us-central1". | `string` | n/a | yes |
 | <a name="input_schedule"></a> [schedule](#input\_schedule) | Cron schedule expression for how often to trigger the backup job (e.g. weekly on Mondays at 09:00 UTC). | `string` | n/a | yes |
+| <a name="input_vpc_access"></a> [vpc\_access](#input\_vpc\_access) | VPC Access connector configuration for the Cloud Run job. Set connector to a VPC Access Connector resource ID (e.g. projects/PROJECT/locations/REGION/connectors/NAME) to route job traffic through your VPC. Recommended for production workloads where Bigtable is accessed via Private Service Connect or VPC Service Controls. | <pre>object({<br/>    connector = string<br/>    egress    = optional(string, "ALL_TRAFFIC")<br/>  })</pre> | `null` | no |
 
 ## Outputs
 

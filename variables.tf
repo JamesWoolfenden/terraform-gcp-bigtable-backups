@@ -48,6 +48,20 @@ variable "job_name" {
   }
 }
 
+variable "vpc_access" {
+  type = object({
+    connector = string
+    egress    = optional(string, "ALL_TRAFFIC")
+  })
+  description = "VPC Access connector configuration for the Cloud Run job. Set connector to a VPC Access Connector resource ID (e.g. projects/PROJECT/locations/REGION/connectors/NAME) to route job traffic through your VPC. Recommended for production workloads where Bigtable is accessed via Private Service Connect or VPC Service Controls."
+  default     = null
+
+  validation {
+    condition     = var.vpc_access == null || length(trimspace(var.vpc_access.connector)) > 0
+    error_message = "vpc_access.connector must not be empty when vpc_access is set."
+  }
+}
+
 variable "schedule" {
   type        = string
   description = "Cron schedule expression for how often to trigger the backup job (e.g. weekly on Mondays at 09:00 UTC)."
