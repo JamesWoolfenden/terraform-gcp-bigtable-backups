@@ -1,0 +1,15 @@
+id: HLD_PROPOSED_006
+name: GCP resource location must be a valid region or multi-region identifier
+principle: governance
+severity: LOW
+rationale: |
+  GCP location strings follow a predictable format (e.g. us-central1,
+  europe-west2, US, EU). An invalid value passes Terraform validate but
+  fails at apply time; catching format errors at scan time avoids failed
+  applies and surfaces typos early in CI.
+remediation: |
+  Use a valid GCP region or multi-region name as the location value.
+resources:
+  "*":
+    path: location
+    matches: "^([a-z]+-[a-z]+[0-9]+|US|EU|ASIA)$"

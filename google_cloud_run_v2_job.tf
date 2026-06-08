@@ -5,6 +5,7 @@ resource "google_cloud_run_v2_job" "default" {
 
   template {
     template {
+      service_account = google_service_account.backup_job.email
       containers {
         image = var.image
         env {

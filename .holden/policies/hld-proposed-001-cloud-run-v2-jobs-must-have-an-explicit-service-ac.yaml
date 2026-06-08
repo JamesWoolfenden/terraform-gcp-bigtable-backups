@@ -1,0 +1,26 @@
+id: HLD_PROPOSED_001
+name: Cloud Run v2 jobs must have an explicit service account configured
+principle: identity-and-access
+severity: HIGH
+rationale: |
+  When template.template.service_account is omitted, Cloud Run v2 runs the job
+  as the default Compute Engine service account, which typically holds
+  roles/editor at project level. HLD_GCP_177 only catches the case where the
+  default SA email is explicitly written; this rule catches the silent-default
+  case where the attribute is absent entirely.
+remediation: |
+  Add an explicit service account to the job template:
+
+  ```hcl
+  resource "google_cloud_run_v2_job" "main" {
+    template {
+      template {
+        service_account = google_service_account.job.email
+      }
+    }
+  }
+  ```
+resources:
+  google_cloud_run_v2_job:
+    path: template.template.service_account
+    not_null: true

@@ -1,0 +1,73 @@
+{
+  "findings": [
+    {
+      "confidence": "high",
+      "explanation": "HLD_GCP_177 ('Cloud Run v2 jobs must not use the default Compute Engine service account') implements its check via `not_matches: '.*-compute@developer\\.gserviceaccount\\.com$'` on `template.template.service_account`. When the attribute is entirely absent \u00e2\u20ac\u201d as it is here \u00e2\u20ac\u201d `not_matches` on a null value evaluates to true (no match = passes the check), so the policy fires only when the default SA email is *explicitly* written, not when it is *implicitly* inherited by omission. At runtime, Cloud Run v2 jobs with no `service_account` set run as `{PROJECT_NUMBER}-compute@developer.gserviceaccount.com`, which typically carries `roles/editor` at project level. The backup container therefore has read/write access to every GCP resource in the project \u00e2\u20ac\u201d far more than the Bigtable backup permissions it actually needs.",
+      "file": "google_cloud_run_v2_job.tf",
+      "id": "HOLDEN_AI_001",
+      "line": 7,
+      "principle": "identity-and-access",
+      "related_resources": [
+        "google_cloud_scheduler_job.backup"
+      ],
+      "remediation": "Add `service_account = google_service_account.backup_job.email` inside `template { template { ... } }` in google_cloud_run_v2_job.tf, and create a dedicated `google_service_account` resource with only the permissions required for Bigtable backups (e.g. `roles/bigtable.backupCreator` on the specific instance).",
+      "resource": "google_cloud_run_v2_job.default",
+      "severity": "HIGH",
+      "title": "Cloud Run v2 job has no explicit service_account \u00e2\u20ac\u201d runs as default Compute SA, bypassing HLD_GCP_177"
+    },
+    {
+      "confidence": "high",
+      "explanation": "HLD_GCP_201 checks only that *some* auth token is configured, so the scheduler passes. But the token type and identity matter: the module uses `oauth_token` (a GCP access token) rather than `oidc_token` (an identity token). For Cloud Run v2 job invocation, GCP's own guidance recommends `oidc_token` \u00e2\u20ac\u201d it issues a narrowly-scoped identity assertion, whereas `oauth_token` with `scope = 'https://www.googleapis.com/auth/cloud-platform'` carries the full IAM permission set of the service account. That service account is hardcoded to `${data.google_project.project.number}-compute@developer.gserviceaccount.com` \u00e2\u20ac\u201d the default Compute SA \u00e2\u20ac\u201d which has Editor-level access to the whole project. An intercepted or replayed oauth_token could therefore be used to read secrets, write to storage, or modify other compute resources.",
+      "file": "google_cloud_scheduler.tf",
+      "id": "HOLDEN_AI_002",
+      "line": 11,
+      "principle": "identity-and-access",
+      "related_resources": [
+        "google_cloud_run_v2_job.default",
+        "data.google_project.project"
+      ],
+      "remediation": "Replace `oauth_token` with `oidc_token` in the `http_target` block of `google_cloud_scheduler_job.backup`, and set `service_account_email` to a dedicated SA that has only `roles/run.invoker` on `google_cloud_run_v2_job.default`. Remove the `oauth_token` block entirely:\n\n  oidc_token {\n    audience              = \"https://${var.region}-run.googleapis.com/\"\n    service_account_email = google_service_account.scheduler_invoker.email\n  }",
+      "resource": "google_cloud_scheduler_job.backup",
+      "severity": "HIGH",
+      "title": "Cloud Scheduler uses oauth_token with cloud-platform scope and the default Compute SA to invoke Cloud Run"
+    }
+  ],
+  "suggested_policies": [
+    {
+      "rationale": "HLD_GCP_177 catches `google_cloud_run_v2_job` resources that explicitly set `template.template.service_account` to the default Compute SA email pattern. It does not catch the case where the attribute is entirely absent, because `not_matches` on a null value returns true. At runtime, an omitted service_account causes Cloud Run to use the default Compute SA (Editor on the project). A companion `not_null` policy directly on the same path closes this gap: the two rules together enforce 'must be set AND must not be the default SA', matching the intent that HLD_GCP_177 was written with but cannot express alone.",
+      "yaml": "id: HLD_PROPOSED_001\nname: Cloud Run v2 jobs must have an explicit service account configured\nprinciple: identity-and-access\nseverity: HIGH\nrationale: |\n  When template.template.service_account is omitted, Cloud Run v2 runs the job\n  as the default Compute Engine service account, which typically holds\n  roles/editor at project level. HLD_GCP_177 only catches the case where the\n  default SA email is explicitly written; this rule catches the silent-default\n  case where the attribute is absent entirely.\nremediation: |\n  Add an explicit service account to the job template:\n\n  ```hcl\n  resource \"google_cloud_run_v2_job\" \"main\" {\n    template {\n      template {\n        service_account = google_service_account.job.email\n      }\n    }\n  }\n  ```\nresources:\n  google_cloud_run_v2_job:\n    path: template.template.service_account\n    not_null: true\n"
+    },
+    {
+      "rationale": "HLD_GCP_200 ('Cloud Run container images must not use the :latest tag') applies only to `google_cloud_run_v2_service`. Cloud Run v2 *jobs* use an identical container image configuration under `template.template.containers.image` (one extra nesting level from the ExecutionTemplate/TaskTemplate split), but they are not covered by HLD_GCP_200 nor by any other existing policy in `coverage_by_type['google_cloud_run_v2_job']` (which lists only HLD_GCP_176 and HLD_GCP_177). The same supply-chain risk applies: a mutable :latest tag means the image resolved at job execution time is not the image reviewed at `terraform apply` time, and rollbacks become non-deterministic.",
+      "yaml": "id: HLD_PROPOSED_002\nname: Cloud Run v2 job container images must not use the :latest tag\nprinciple: supply-chain\nseverity: LOW\nrationale: |\n  Cloud Run v2 jobs configured with a mutable :latest image tag cannot provide\n  reproducible executions. Each job run may pull a different image than the one\n  reviewed at deploy time, bypassing digest-level integrity guarantees and making\n  rollbacks non-deterministic. This is the job equivalent of HLD_GCP_200, which\n  already enforces the same rule on Cloud Run v2 services.\nremediation: |\n  Replace ':latest' with a specific image digest or version tag:\n\n  ```hcl\n  containers {\n    image = \"us-central1-docker.pkg.dev/my-project/my-repo/backup:v1.2.3\"\n    # or pin by digest:\n    image = \"us-central1-docker.pkg.dev/my-project/my-repo/backup@sha256:<digest>\"\n  }\n  ```\nresources:\n  google_cloud_run_v2_job:\n    path: template.template.containers.image\n    not_matches: \":latest$\"\n"
+    },
+    {
+      "rationale": "HLD_GCP_177 prevents Cloud Run v2 jobs from running as the default Compute SA. The same principle applies to the identity used by Cloud Scheduler when it invokes Cloud Run via http_target.oauth_token: if the scheduler's oauth_token.service_account_email is the default Compute SA, any GCP access token issued for that call carries Editor-level permissions on the project rather than only the run.invoker permission actually needed. Coverage for `google_cloud_scheduler_job` contains only HLD_GCP_201 (auth token present), which passes because oauth_token is set. No policy checks which SA identity is used inside the token block.",
+      "yaml": "id: HLD_PROPOSED_003\nname: Cloud Scheduler oauth_token must not use the default Compute Engine service account\nprinciple: identity-and-access\nseverity: HIGH\nrationale: |\n  The default Compute Engine service account has roles/editor on the project.\n  A Cloud Scheduler job using this identity for oauth_token authentication\n  issues access tokens with project-wide Editor permissions rather than the\n  narrow invoker permission actually needed to trigger a single Cloud Run job.\n  Use a dedicated, minimal service account instead.\nremediation: |\n  Replace the default Compute SA reference with a dedicated service account:\n\n  ```hcl\n  http_target {\n    oidc_token {\n      service_account_email = google_service_account.scheduler_invoker.email\n      audience              = \"https://<region>-run.googleapis.com/\"\n    }\n  }\n  ```\n  Prefer oidc_token over oauth_token for Cloud Run targets.\nresources:\n  google_cloud_scheduler_job:\n    filter:\n      path: http_target.oauth_token\n      not_null: true\n    path: http_target.oauth_token.service_account_email\n    not_matches: \".*-compute@developer\\\\.gserviceaccount\\\\.com$\"\n"
+    },
+    {
+      "dsl_extension_note": "Needs a `matches: <regex>` operator that fails when the field value does NOT match the pattern. With it: `path: template.template.containers.image` `matches: \"@sha256:[a-f0-9]{64}$\"` enforces digest pinning.",
+      "rationale": "HLD_PROPOSED_002 catches :latest; a mutable version tag (e.g. :v1.0.0) is a different, softer failure \u2014 intentional but still overwriteable in most registries. Only a digest pin (@sha256:<hash>) guarantees exact byte identity. This is tier 2 of a two-tier rule: :latest (tier 1, LOW) -> mutable tag (tier 2, MEDIUM) -> digest (ideal). Requires a `matches` DSL operator (inverse of not_matches) to express \"value must match this pattern\".",
+      "requires_dsl_extension": true,
+      "yaml": "id: HLD_PROPOSED_004\nname: Cloud Run v2 job container images should be pinned by digest\nprinciple: supply-chain\nseverity: MEDIUM\nrationale: |\n  A version tag such as :v1.0.0 is intentional but still mutable in most\n  container registries \u2014 the tag can be overwritten without any Terraform\n  change, so the image run at next job execution may differ from the one\n  reviewed at deploy time. Only a digest pin (@sha256:hash) guarantees\n  immutability. HLD_PROPOSED_002 flags :latest (tier 1); this rule flags\n  the subtler mutable-tag failure (tier 2).\nremediation: |\n  Replace the version tag with a digest reference:\n\n  ```hcl\n  containers {\n    image = \"us-central1-docker.pkg.dev/project/repo/app@sha256:<64-hex>\"\n  }\n  ```\n  Retrieve the digest: docker inspect --format=\"{{index .RepoDigests 0}}\" image\nresources:\n  google_cloud_run_v2_job:\n    path: template.template.containers.image\n    matches: \"@sha256:[a-f0-9]{64}$\"\n"
+    },
+    {
+      "dsl_extension_note": "Needs a `matches: <regex>` operator. With it: `resources: \"*\": path: project  matches: \"^[a-z][a-z0-9-]{4,28}[a-z0-9]$\"` validates project ID format across all GCP resource types in one policy.",
+      "rationale": "The GCP project ID format is well-defined: 6-30 chars, lowercase letters/digits/hyphens, starts with a letter, does not end with a hyphen. An invalid value passes Terraform plan but is rejected by the GCP API at apply time. Holden already uses \"*\" as a wildcard resource type (HLD_TF_036 et al.), so a single policy with `resources: \"*\": path: project` and `matches` would cover all GCP resources. Requires a `matches` DSL operator.",
+      "requires_dsl_extension": true,
+      "yaml": "id: HLD_PROPOSED_005\nname: GCP resource project attribute must be a valid project ID\nprinciple: governance\nseverity: LOW\nrationale: |\n  The GCP project ID has a well-defined format: 6-30 characters, lowercase\n  letters, digits or hyphens, starting with a letter and not ending with a\n  hyphen. An invalid value is caught only at apply time by the GCP API;\n  catching it at scan time gives earlier feedback without requiring credentials.\nremediation: |\n  Ensure the project attribute matches: ^[a-z][a-z0-9-]{4,28}[a-z0-9]$\nresources:\n  \"*\":\n    path: project\n    matches: \"^[a-z][a-z0-9-]{4,28}[a-z0-9]$\"\n"
+    },
+    {
+      "dsl_extension_note": "Needs `matches: <regex>` operator. With it: `resources: \"*\": path: location  matches: \"^([a-z]+-[a-z]+[0-9]+|US|EU|ASIA)$\"` validates region format across all GCP resources.",
+      "rationale": "GCP region strings follow the pattern <area>-<direction><number> (e.g. us-central1, europe-west2) or multi-region identifiers (US, EU, ASIA). An invalid location passes Terraform validate but fails at apply time. Same wildcard-resource-type + `matches` approach as HLD_PROPOSED_005.",
+      "requires_dsl_extension": true,
+      "yaml": "id: HLD_PROPOSED_006\nname: GCP resource location must be a valid region or multi-region identifier\nprinciple: governance\nseverity: LOW\nrationale: |\n  GCP location strings follow a predictable format (e.g. us-central1,\n  europe-west2, US, EU). An invalid value passes Terraform validate but\n  fails at apply time; catching format errors at scan time avoids failed\n  applies and surfaces typos early in CI.\nremediation: |\n  Use a valid GCP region or multi-region name as the location value.\nresources:\n  \"*\":\n    path: location\n    matches: \"^([a-z]+-[a-z]+[0-9]+|US|EU|ASIA)$\"\n"
+    },
+    {
+      "dsl_extension_note": "Needs a new `key_matches: <regex>` DSL construct for map-typed attributes that iterates the map keys and fails if any key does not match the regex. Distinct from `matches`/`not_matches` which act on scalar string values, not map keys.",
+      "rationale": "GCP label keys must be 1-63 chars, start with a lowercase letter, and contain only lowercase letters, digits, hyphens or underscores. Existing label policies (HLD_GCP_019, HLD_TF_036, HLD_GCP_072) check presence and tautology, not key format. An invalid key is silently accepted by Terraform but rejected by the GCP API at apply time. Checking map key format requires iterating the keys of a map-typed attribute rather than checking a single scalar path \u2014 a capability the current DSL does not have.",
+      "requires_dsl_extension": true,
+      "yaml": "id: HLD_PROPOSED_007\nname: GCP resource label keys must follow GCP naming rules\nprinciple: governance\nseverity: LOW\nrationale: |\n  GCP label keys must be 1-63 characters, start with a lowercase letter, and\n  contain only lowercase letters, digits, hyphens or underscores. Invalid keys\n  pass Terraform validation but are rejected by the GCP API at apply time.\n  HLD_GCP_019 checks presence; HLD_TF_036 checks tautology. Neither checks\n  key format.\nremediation: |\n  Rename label keys to match: ^[a-z][a-z0-9_-]{0,62}$\nresources:\n  \"*\":\n    path: labels\n    key_matches: \"^[a-z][a-z0-9_-]{0,62}$\"\n"
+    }
+  ]
+}

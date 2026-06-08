@@ -1,2 +1,1 @@
-data "google_project" "project" {
-}
+# required

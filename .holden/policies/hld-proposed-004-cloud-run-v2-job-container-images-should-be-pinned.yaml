@@ -1,0 +1,24 @@
+id: HLD_PROPOSED_004
+name: Cloud Run v2 job container images should be pinned by digest
+principle: supply-chain
+severity: MEDIUM
+rationale: |
+  A version tag such as :v1.0.0 is intentional but still mutable in most
+  container registries — the tag can be overwritten without any Terraform
+  change, so the image run at next job execution may differ from the one
+  reviewed at deploy time. Only a digest pin (@sha256:hash) guarantees
+  immutability. HLD_PROPOSED_002 flags :latest (tier 1); this rule flags
+  the subtler mutable-tag failure (tier 2).
+remediation: |
+  Replace the version tag with a digest reference:
+
+  ```hcl
+  containers {
+    image = "us-central1-docker.pkg.dev/project/repo/app@sha256:<64-hex>"
+  }
+  ```
+  Retrieve the digest: docker inspect --format="{{index .RepoDigests 0}}" image
+resources:
+  google_cloud_run_v2_job:
+    path: template.template.containers.image
+    matches: "@sha256:[a-f0-9]{64}$"

@@ -1,0 +1,15 @@
+id: HLD_PROPOSED_005
+name: GCP resource project attribute must be a valid project ID
+principle: governance
+severity: LOW
+rationale: |
+  The GCP project ID has a well-defined format: 6-30 characters, lowercase
+  letters, digits or hyphens, starting with a letter and not ending with a
+  hyphen. An invalid value is caught only at apply time by the GCP API;
+  catching it at scan time gives earlier feedback without requiring credentials.
+remediation: |
+  Ensure the project attribute matches: ^[a-z][a-z0-9-]{4,28}[a-z0-9]$
+resources:
+  "*":
+    path: project
+    matches: "^[a-z][a-z0-9-]{4,28}[a-z0-9]$"

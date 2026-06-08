@@ -1,0 +1,24 @@
+id: HLD_PROPOSED_002
+name: Cloud Run v2 job container images must not use the :latest tag
+principle: supply-chain
+severity: LOW
+rationale: |
+  Cloud Run v2 jobs configured with a mutable :latest image tag cannot provide
+  reproducible executions. Each job run may pull a different image than the one
+  reviewed at deploy time, bypassing digest-level integrity guarantees and making
+  rollbacks non-deterministic. This is the job equivalent of HLD_GCP_200, which
+  already enforces the same rule on Cloud Run v2 services.
+remediation: |
+  Replace ':latest' with a specific image digest or version tag:
+
+  ```hcl
+  containers {
+    image = "us-central1-docker.pkg.dev/my-project/my-repo/backup:v1.2.3"
+    # or pin by digest:
+    image = "us-central1-docker.pkg.dev/my-project/my-repo/backup@sha256:<digest>"
+  }
+  ```
+resources:
+  google_cloud_run_v2_job:
+    path: template.template.containers.image
+    not_matches: ":latest$"

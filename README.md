@@ -59,23 +59,30 @@ No modules.
 | Name | Type |
 | ---- | ---- |
 | [google_cloud_run_v2_job.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_v2_job) | resource |
+| [google_cloud_run_v2_job_iam_member.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_v2_job_iam_member) | resource |
 | [google_cloud_scheduler_job.backup](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_scheduler_job) | resource |
-| [google_project.project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
+| [google_service_account.backup_job](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
+| [google_service_account.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_image"></a> [image](#input\_image) | container image | `string` | n/a | yes |
-| <a name="input_job_name"></a> [job\_name](#input\_job\_name) | n/a | `string` | n/a | yes |
-| <a name="input_labels"></a> [labels](#input\_labels) | The labels | `map(any)` | n/a | yes |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID where the resource is to be setup | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | region where the resource is to be created | `string` | n/a | yes |
-| <a name="input_schedule"></a> [schedule](#input\_schedule) | n/a | `string` | n/a | yes |
+| <a name="input_image"></a> [image](#input\_image) | Container image URL for the backup job, e.g. "us-central1-docker.pkg.dev/my-project/my-repo/backup:v1.0.0". | `string` | n/a | yes |
+| <a name="input_job_name"></a> [job\_name](#input\_job\_name) | Name of the Cloud Run v2 job. Used as a prefix for derived resource names (service accounts). Must be 1-26 characters, lowercase letters, digits or hyphens, starting with a letter. | `string` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to all created resources. | `map(string)` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID in which all resources are created. | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | GCP region in which the Cloud Run job and Cloud Scheduler job are created, e.g. "us-central1". | `string` | n/a | yes |
+| <a name="input_schedule"></a> [schedule](#input\_schedule) | Cron schedule expression for how often to trigger the backup job (e.g. weekly on Mondays at 09:00 UTC). | `string` | n/a | yes |
 
 ## Outputs
 
-No outputs.
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_backup_job_service_account_email"></a> [backup\_job\_service\_account\_email](#output\_backup\_job\_service\_account\_email) | Email of the service account the Cloud Run job runs as. Grant it Bigtable backup permissions on the relevant instance. |
+| <a name="output_job"></a> [job](#output\_job) | The Cloud Run v2 backup job. |
+| <a name="output_scheduler"></a> [scheduler](#output\_scheduler) | The Cloud Scheduler job that triggers the backup. |
+| <a name="output_scheduler_invoker_service_account_email"></a> [scheduler\_invoker\_service\_account\_email](#output\_scheduler\_invoker\_service\_account\_email) | Email of the service account Cloud Scheduler uses to invoke the job. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 
 ## Information
@@ -96,10 +103,15 @@ resource "google_project_iam_custom_role" "terraform_pike" {
     "cloudscheduler.jobs.enable",
     "cloudscheduler.jobs.get",
     "cloudscheduler.jobs.update",
-    "resourcemanager.projects.get",
+    "iam.serviceAccounts.create",
+    "iam.serviceAccounts.delete",
+    "iam.serviceAccounts.get",
+    "iam.serviceAccounts.update",
     "run.jobs.create",
     "run.jobs.delete",
     "run.jobs.get",
+    "run.jobs.getIamPolicy",
+    "run.jobs.setIamPolicy",
     "run.jobs.update",
     "run.operations.get"
   ]

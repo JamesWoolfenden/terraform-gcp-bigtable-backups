@@ -1,0 +1,29 @@
+id: HLD_PROPOSED_003
+name: Cloud Scheduler oauth_token must not use the default Compute Engine service account
+principle: identity-and-access
+severity: HIGH
+rationale: |
+  The default Compute Engine service account has roles/editor on the project.
+  A Cloud Scheduler job using this identity for oauth_token authentication
+  issues access tokens with project-wide Editor permissions rather than the
+  narrow invoker permission actually needed to trigger a single Cloud Run job.
+  Use a dedicated, minimal service account instead.
+remediation: |
+  Replace the default Compute SA reference with a dedicated service account:
+
+  ```hcl
+  http_target {
+    oidc_token {
+      service_account_email = google_service_account.scheduler_invoker.email
+      audience              = "https://<region>-run.googleapis.com/"
+    }
+  }
+  ```
+  Prefer oidc_token over oauth_token for Cloud Run targets.
+resources:
+  google_cloud_scheduler_job:
+    filter:
+      path: http_target.oauth_token
+      not_null: true
+    path: http_target.oauth_token.service_account_email
+    not_matches: ".*-compute@developer\\.gserviceaccount\\.com$"

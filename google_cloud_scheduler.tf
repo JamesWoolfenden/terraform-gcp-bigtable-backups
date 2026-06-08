@@ -8,9 +8,9 @@ resource "google_cloud_scheduler_job" "backup" {
     http_method = "POST"
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.project_id}/jobs/${var.job_name}:run"
 
-    oauth_token {
-      scope                 = "https://www.googleapis.com/auth/cloud-platform"
-      service_account_email = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+    oidc_token {
+      audience              = "https://${var.region}-run.googleapis.com/"
+      service_account_email = google_service_account.scheduler_invoker.email
     }
   }
 
