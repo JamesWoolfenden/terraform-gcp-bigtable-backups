@@ -18,15 +18,6 @@ variable "project_id" {
   }
 }
 
-variable "labels" {
-  type        = map(string)
-  description = "Labels to apply to all created resources."
-
-  validation {
-    condition     = alltrue([for k in keys(var.labels) : can(regex("^[a-z][a-z0-9_-]{0,62}$", k))])
-    error_message = "Label keys must start with a lowercase letter and contain only lowercase letters, digits, hyphens or underscores, up to 63 characters."
-  }
-}
 
 variable "image" {
   type        = string
@@ -69,5 +60,27 @@ variable "schedule" {
   validation {
     condition     = length(trimspace(var.schedule)) > 0
     error_message = "schedule must not be empty."
+  }
+}
+
+variable "timeout" {
+  type        = string
+  description = "Execution timeout for the backup job, e.g. \"3600s\". Cloud Run Jobs default to 600s if unset, which may be too short for large Bigtable backups; raise it further for larger tables (max 24h)."
+  default     = "3600s"
+
+  validation {
+    condition     = can(regex("^[0-9]+s$", var.timeout))
+    error_message = "timeout must be a duration string in seconds, e.g. \"3600s\"."
+  }
+}
+
+variable "encryption_key" {
+  type        = string
+  description = "Customer-managed encryption key (CMEK) resource name, e.g. projects/my-project/locations/global/keyRings/my-kr/cryptoKeys/my-key"
+  sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.encryption_key)) > 0
+    error_message = "encryption_key must not be empty when set. Provide a full KMS resource name for CMEK."
   }
 }

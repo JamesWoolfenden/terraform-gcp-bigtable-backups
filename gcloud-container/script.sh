@@ -27,4 +27,4 @@ set -eo pipefail
 
 # Write a report containing the service name, service URL, service account or user that
 # deployed it, and any explicitly configured service "limits" such as CPU or Memory.
-gcloud bigtable backups create $RANDOM --instance=yourinstance --cluster=yourcluster --table=example --retention-period=7d --project "$1"
+gcloud bigtable backups create "${RANDOM}" --instance=yourinstance --cluster=yourcluster --table=example --retention-period=7d --project "${1}"

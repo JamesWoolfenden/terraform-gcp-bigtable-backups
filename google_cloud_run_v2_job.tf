@@ -7,6 +7,10 @@ resource "google_cloud_run_v2_job" "default" {
   template {
     template {
       service_account = google_service_account.backup_job.email
+      timeout         = var.timeout
+
+      # Use customer-managed encryption key (CMEK) for container instances
+      encryption_key = var.encryption_key
 
       dynamic "vpc_access" {
         for_each = var.vpc_access != null ? [var.vpc_access] : []
@@ -17,6 +21,7 @@ resource "google_cloud_run_v2_job" "default" {
       }
 
       containers {
+        # Image must be pinned by digest (image@sha256:<64-hex>) for Cloud Run v2
         image = var.image
         env {
           name  = "project"
@@ -31,8 +36,6 @@ resource "google_cloud_run_v2_job" "default" {
       }
     }
   }
-
-  labels = var.labels
 
   lifecycle {
     ignore_changes = [

@@ -19,7 +19,7 @@ resource "google_cloud_scheduler_job" "backup" {
     max_doublings        = 5
     max_retry_duration   = "0s"
     min_backoff_duration = "5s"
-    retry_count          = 0
+    retry_count          = 3
   }
   region = var.region
 

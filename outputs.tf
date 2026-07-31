@@ -1,11 +1,13 @@
 output "job" {
   value       = google_cloud_run_v2_job.default
   description = "The Cloud Run v2 backup job."
+  sensitive   = true
 }
 
 output "scheduler" {
   value       = google_cloud_scheduler_job.backup
   description = "The Cloud Scheduler job that triggers the backup."
+  sensitive   = true
 }
 
 output "backup_job_service_account_email" {

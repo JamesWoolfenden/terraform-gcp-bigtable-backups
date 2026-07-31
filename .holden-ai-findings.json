@@ -1,0 +1,60 @@
+{
+  "findings": [
+    {
+      "confidence": "high",
+      "explanation": "template.template.encryption_key is set (correctly, per the code comment 'Use customer-managed encryption key (CMEK) for container instances'), and HLD_GCP_363 passes because it only checks that the attribute is non-null. But Cloud Run does not automatically gain access to a caller-supplied CMEK: Google requires the Cloud Run service agent (service-PROJECT_NUMBER@serverless-robot-prod.iam.gserviceaccount.com) to hold roles/cloudkms.cryptoKeyEncrypterDecrypter on that exact key before the job can be created or executed. Neither this module nor the example that exercises it (which creates google_kms_crypto_key.backups and passes its id as encryption_key) creates that IAM binding anywhere. Compare with the module's own scheduler-invoker wiring, which does grant the matching companion IAM (google_cloud_run_v2_job_iam_member.scheduler_invoker) \u2014 the CMEK path is missing the equivalent grant. Nothing in variables.tf, outputs.tf, or the README documents this as a caller responsibility either (contrast with backup_job_service_account_email's output description, which explicitly tells callers to grant Bigtable permissions themselves) \u2014 so a caller who follows the example as written gets a job that fails to deploy or run.",
+      "file": "google_cloud_run_v2_job.tf",
+      "first_seen": "2026-07-30",
+      "fixable": false,
+      "id": "HOLDEN_AI_001",
+      "last_seen": "2026-07-30",
+      "line": 10,
+      "principle": "encryption",
+      "related_resources": [
+        "variables.tf (encryption_key)",
+        "example/examplea/module.bigtable_backups.tf (google_kms_crypto_key.backups)"
+      ],
+      "remediation": "Either grant the binding inside the module (requires project number, so add a data source):\n\n  data \"google_project\" \"current\" {\n    project_id = var.project_id\n  }\n\n  resource \"google_kms_crypto_key_iam_member\" \"cloud_run_cmek\" {\n    crypto_key_id = var.encryption_key\n    role          = \"roles/cloudkms.cryptoKeyEncrypterDecrypter\"\n    member        = \"serviceAccount:service-${data.google_project.current.number}@serverless-robot-prod.iam.gserviceaccount.com\"\n  }\n\nor, if the module intentionally treats the CMEK key as caller-owned and out of scope (the same stance it already takes for Bigtable IAM), document the required grant on the encryption_key variable description and in the example, the way backup_job_service_account_email already documents the Bigtable grant.",
+      "resource": "google_cloud_run_v2_job.default",
+      "severity": "HIGH",
+      "status": "fixed",
+      "suppression_reason": null,
+      "title": "CMEK is configured on the Cloud Run job but nothing grants the Cloud Run service agent access to the key",
+      "unresolved_since": "2026-07-30"
+    },
+    {
+      "confidence": "high",
+      "explanation": "variables.tf's image variable has a validation block that rejects any value ending in :latest, and google_cloud_run_v2_job.tf carries a comment stating the image 'must be pinned by digest (image@sha256:<64-hex>)'. But the module's own bundled build pipeline for that image, gcloud-container/cloudbuild.yaml, builds and pushes only us-central1-docker.pkg.dev/$PROJECT_ID/pike/backup:latest \u2014 the exact tag shape the module refuses to accept. A user who follows gcloud-container/Readme.md's documented build steps ends up with an image reference their own Terraform config will reject at plan time. This is a two-file consistency gap a rules engine can't see (one is a Terraform variable validation, the other is a Cloud Build YAML file outside holden's Terraform-resource model).",
+      "file": "gcloud-container/cloudbuild.yaml",
+      "first_seen": "2026-07-30",
+      "fix": "steps:\n  - name: \"gcr.io/cloud-builders/docker\"\n    script: |\n      docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/pike/backup:$SHORT_SHA .\n    automapSubstitutions: true\nimages:\n  - \"us-central1-docker.pkg.dev/$PROJECT_ID/pike/backup:$SHORT_SHA\"\n",
+      "fixable": true,
+      "id": "HOLDEN_AI_002",
+      "last_seen": "2026-07-30",
+      "line": 4,
+      "principle": "supply-chain",
+      "related_resources": [
+        "variables.tf (variable \"image\" validation)",
+        "google_cloud_run_v2_job.tf (containers.image comment: 'must be pinned by digest')"
+      ],
+      "remediation": "Stop tagging/pushing :latest; tag by commit instead, e.g. using Cloud Build's built-in substitution:\n\n  steps:\n    - name: \"gcr.io/cloud-builders/docker\"\n      script: |\n        docker build -t us-central1-docker.pkg.dev/$PROJECT_ID/pike/backup:$SHORT_SHA .\n      automapSubstitutions: true\n  images:\n    - \"us-central1-docker.pkg.dev/$PROJECT_ID/pike/backup:$SHORT_SHA\"\n\nCallers still need to resolve that tag to a digest (docker push/gcloud artifacts docker images describe) to satisfy the module's digest-pinning comment and HLD_GCP_304, but this at minimum removes the mutable-tag contradiction with the module's own validation.",
+      "resource": "gcloud-container/cloudbuild.yaml",
+      "severity": "MEDIUM",
+      "status": "fixed",
+      "suppression_reason": null,
+      "title": "cloudbuild.yaml only ever produces a :latest tag, which the module's own image variable explicitly forbids",
+      "unresolved_since": "2026-07-30"
+    }
+  ],
+  "scan_date": "2026-07-30T00:00:00Z",
+  "scan_path": ".",
+  "suggested_policies": [
+    {
+      "dsl_extension_note": "checkCompanion's linked_via branch (internal/policy/evaluator.go ~line 1114) bails to Unknown whenever either side's resolved value is graph.DynamicValue (the __holden_dynamic__ sentinel), which is what any single-reference attribute expression (e.g. google_kms_crypto_key.run.id, or google_pubsub_topic.x.id in the existing HLD_GCP_280) resolves to today. Implemented primitive: when GetFromMap returns DynamicValue for a linked_via from/to path, fall back to resolving via g.Edges \u2014 find the outbound edge from the subject resource whose Attr matches the from path to get its target resource ID, do the same for the companion's to path, and compare target resource IDs instead of raw values. This reuses the existing edge-based matching already implemented in the non-linked_via branch of checkCompanion/checkForbidsCompanion, so it's additive rather than a new mechanism. Verified empirically before implementing: a controlled fixture with google_cloud_run_v2_job.encryption_key and a matching google_kms_crypto_key_iam_member.crypto_key_id, both referencing the same google_kms_crypto_key via .id, produced zero findings (not Pass, not Fail) for both the proposed HLD_PROPOSED_007 and, when reproduced with google_pubsub_subscription/google_pubsub_topic_iam_member, for the existing shipped HLD_GCP_280 \u2014 confirming this was a pre-existing engine gap, not specific to the new policy. Implemented in internal/policy/evaluator.go (resolveEdgeTarget helper + checkCompanion/checkForbidsCompanion linked_via fallback), covered by a new evaluator-level unit test plus per-policy fixtures for HLD_PROPOSED_007 and a regression fixture confirming HLD_GCP_280 now fires correctly too.",
+      "rationale": "Cloud Run v2 jobs/services that set encryption_key silently fail to deploy unless the Cloud Run service agent separately holds roles/cloudkms.cryptoKeyEncrypterDecrypter on that exact key \u2014 exactly the same failure shape holden already models for Pub/Sub dead-letter topics (HLD_GCP_280). coverage_by_type[google_cloud_run_v2_job] has no policy checking for this companion grant (only presence-of-encryption_key, via HLD_GCP_363). The blocker isn't the DSL shape \u2014 filter + requires_companion + linked_via is the right, already-used pattern (see HLD_GCP_280) \u2014 it's that linked_via's value-join can't match when both sides are resource-reference expressions (google_kms_crypto_key.x.id): holden's graph resolves single-reference attribute expressions to the sentinel __holden_dynamic__ rather than a comparable value, so checkCompanion's linked_via branch returns Unknown before comparison for any realistic config (verified empirically against this exact policy pattern; HLD_GCP_280 itself has no test and would silently no-op the same way on any config using a resource reference for dead_letter_topic/topic, which is the normal case).",
+      "requires_dsl_extension": true,
+      "yaml": "id: HLD_PROPOSED_007\nname: Cloud Run v2 jobs and services using CMEK must grant the Cloud Run service agent key access\nprinciple: encryption\nseverity: HIGH\nrationale: |\n  Setting encryption_key on a google_cloud_run_v2_job or google_cloud_run_v2_service's\n  execution environment only tells Cloud Run which CMEK to use, it doesn't grant\n  access to it. Google requires the Cloud Run service agent\n  (service-PROJECT_NUMBER@serverless-robot-prod.iam.gserviceaccount.com) to\n  hold roles/cloudkms.cryptoKeyEncrypterDecrypter on that key before the job\n  or service can be created or executed. Without a matching\n  google_kms_crypto_key_iam_member (or _binding) granting that role on the\n  same key, deployment or execution fails, and nothing on the\n  google_cloud_run_v2_job/google_cloud_run_v2_service resource itself surfaces\n  the missing prerequisite.\nremediation: |\n  Grant the Cloud Run service agent access to the key referenced:\n\n    data \"google_project\" \"current\" {}\n\n    resource \"google_kms_crypto_key_iam_member\" \"cloud_run_cmek\" {\n      crypto_key_id = google_kms_crypto_key.example.id\n      role          = \"roles/cloudkms.cryptoKeyEncrypterDecrypter\"\n      member        = \"serviceAccount:service-${data.google_project.current.number}@serverless-robot-prod.iam.gserviceaccount.com\"\n    }\nresources:\n  google_cloud_run_v2_job:\n    filter:\n      path: template.template.encryption_key\n      not_null: true\n    requires_companion:\n      type: google_kms_crypto_key_iam_member\n      linked_via:\n        from: template.template.encryption_key\n        to: crypto_key_id\n      where:\n        path: role\n        equals: roles/cloudkms.cryptoKeyEncrypterDecrypter\n  google_cloud_run_v2_service:\n    filter:\n      path: template.encryption_key\n      not_null: true\n    requires_companion:\n      type: google_kms_crypto_key_iam_member\n      linked_via:\n        from: template.encryption_key\n        to: crypto_key_id\n      where:\n        path: role\n        equals: roles/cloudkms.cryptoKeyEncrypterDecrypter\n"
+    }
+  ],
+  "suggested_suppressions": []
+}

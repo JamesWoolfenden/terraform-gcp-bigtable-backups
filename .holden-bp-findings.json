@@ -1,0 +1,58 @@
+{
+  "findings": [
+    {
+      "confidence": "high",
+      "explanation": "retry_count = 0 tells Cloud Scheduler to never retry a failed invocation \u2014 the job simply waits for the next scheduled run. That's the API default, but here it sits alongside max_backoff_duration, max_doublings and min_backoff_duration, which only have any effect when retry_count > 0. As written, those three fields are inert and the block reads as if retries were intended but accidentally left disabled. Given the default schedule is weekly (\"0 9 * * 1\"), a single transient failure (Cloud Run cold start, IAM propagation delay, brief API blip) means the backup is silently skipped for a full week with no automatic recovery.",
+      "file": "google_cloud_scheduler.tf",
+      "first_seen": "2026-07-30",
+      "fix": "retry_config {\n  max_backoff_duration = \"3600s\"\n  max_doublings        = 5\n  max_retry_duration   = \"0s\"\n  min_backoff_duration = \"5s\"\n  retry_count          = 3\n}",
+      "fixable": true,
+      "id": "HOLDEN_BP_001",
+      "last_seen": "2026-07-30",
+      "line": 22,
+      "principle": "reliability",
+      "remediation": "If retries are wanted (the backoff fields suggest they are), set retry_count to a small positive value, e.g. 3:\n\n  retry_config {\n    retry_count           = 3\n    max_backoff_duration  = \"3600s\"\n    max_doublings         = 5\n    max_retry_duration    = \"0s\"\n    min_backoff_duration  = \"5s\"\n  }\n\nIf zero retries is actually intentional, remove the now-misleading backoff fields instead so the config doesn't imply retry behavior that isn't there.",
+      "resource": "google_cloud_scheduler_job.backup",
+      "severity": "MEDIUM",
+      "status": "fixed",
+      "title": "Cloud Scheduler retry_config.retry_count = 0 makes the configured backoff policy dead code"
+    },
+    {
+      "confidence": "high",
+      "explanation": "The job template sets no `timeout`, so it falls back to Cloud Run's default of 600s (10 minutes). Cloud Run v2 Jobs support up to 24h, precisely because job workloads like table backups can run long \u2014 but this module gives callers no variable to raise it. A Bigtable backup that takes longer than 10 minutes (a realistic scenario for larger tables) is silently terminated mid-run by Cloud Run itself, not by an application error, so it may not surface clearly in logs.",
+      "file": "google_cloud_run_v2_job.tf",
+      "first_seen": "2026-07-30",
+      "fix": "variable \"timeout\" {\n  type        = string\n  description = \"Execution timeout for the backup job (e.g. \\\"3600s\\\"). Cloud Run Jobs default to 600s if unset, which may be too short for large Bigtable backups; max is 24h.\"\n  default     = \"3600s\"\n}\n\n# in google_cloud_run_v2_job.tf, template.template block:\ntimeout = var.timeout",
+      "fixable": true,
+      "id": "HOLDEN_BP_002",
+      "last_seen": "2026-07-30",
+      "line": 8,
+      "principle": "reliability",
+      "remediation": "Add a `timeout` variable (default something generous, e.g. \"3600s\") and set it on the job template:\n\n  template {\n    template {\n      timeout = var.timeout\n      ...\n    }\n  }\n\nDocument that callers with large Bigtable instances should raise it further, up to Cloud Run's 24h ceiling.",
+      "resource": "google_cloud_run_v2_job.default",
+      "severity": "MEDIUM",
+      "status": "fixed",
+      "title": "Cloud Run v2 Job has no execution timeout configured or exposed, defaulting to 600s"
+    },
+    {
+      "confidence": "high",
+      "explanation": "The only `required_providers`/`required_version` declaration in this repo lives in example/examplea/terraform.tf, which pins the consuming example, not the module itself. The module root (main.tf, google_cloud_run_v2_job.tf, google_cloud_scheduler.tf, google_service_account.tf) has no terraform {} block at all, so it places no floor on the Terraform CLI version or the hashicorp/google provider version a caller uses. A caller could apply this module with an old Terraform CLI or an incompatible google provider major version and get silently different behavior (e.g. google_cloud_run_v2_job attribute defaults have changed across provider majors), with no version-constraint error to catch it. Existing holden policies (HLD_TF_002/042/044/054) only fire once a terraform {} block exists and is misconfigured \u2014 they don't catch a block that's missing entirely.",
+      "file": "main.tf",
+      "first_seen": "2026-07-30",
+      "fix": "terraform {\n  required_version = \">= 1.5.0\"\n\n  required_providers {\n    google = {\n      source  = \"hashicorp/google\"\n      version = \">= 7.0\"\n    }\n  }\n}",
+      "fixable": true,
+      "id": "HOLDEN_BP_003",
+      "last_seen": "2026-07-30",
+      "line": 1,
+      "principle": "repeatability",
+      "remediation": "Add a terraform.tf at the module root, mirroring the example's pin:\n\n  terraform {\n    required_version = \">= 1.5.0\"\n    required_providers {\n      google = {\n        source  = \"hashicorp/google\"\n        version = \">= 7.0\"\n      }\n    }\n  }",
+      "resource": "module root",
+      "severity": "LOW",
+      "status": "fixed",
+      "title": "Root module has no terraform { } block \u2014 no required_version or required_providers constraint"
+    }
+  ],
+  "scan_date": "2026-07-30T00:00:00Z",
+  "scan_path": ".",
+  "suggested_policies": []
+}

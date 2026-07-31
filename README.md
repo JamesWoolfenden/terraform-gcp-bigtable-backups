@@ -42,13 +42,16 @@ gcloud builds submit --region=us-central1 --config cloudbuild.yaml --project you
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
-No requirements.
+| Name | Version |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | 7.42.0 |
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | n/a |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.42.0 |
 
 ## Modules
 
@@ -58,22 +61,25 @@ No modules.
 
 | Name | Type |
 | ---- | ---- |
-| [google_cloud_run_v2_job.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_v2_job) | resource |
-| [google_cloud_run_v2_job_iam_member.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_v2_job_iam_member) | resource |
-| [google_cloud_scheduler_job.backup](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_scheduler_job) | resource |
-| [google_service_account.backup_job](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
-| [google_service_account.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
+| [google_cloud_run_v2_job.default](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/cloud_run_v2_job) | resource |
+| [google_cloud_run_v2_job_iam_member.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/cloud_run_v2_job_iam_member) | resource |
+| [google_cloud_scheduler_job.backup](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/cloud_scheduler_job) | resource |
+| [google_kms_crypto_key_iam_member.cloud_run_cmek](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/kms_crypto_key_iam_member) | resource |
+| [google_service_account.backup_job](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/service_account) | resource |
+| [google_service_account.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/service_account) | resource |
+| [google_project.current](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/data-sources/project) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_encryption_key"></a> [encryption\_key](#input\_encryption\_key) | Customer-managed encryption key (CMEK) resource name, e.g. projects/my-project/locations/global/keyRings/my-kr/cryptoKeys/my-key | `string` | n/a | yes |
 | <a name="input_image"></a> [image](#input\_image) | Container image URL for the backup job, e.g. "us-central1-docker.pkg.dev/my-project/my-repo/backup:v1.0.0". | `string` | n/a | yes |
 | <a name="input_job_name"></a> [job\_name](#input\_job\_name) | Name of the Cloud Run v2 job. Used as a prefix for derived resource names (service accounts). Must be 1-26 characters, lowercase letters, digits or hyphens, starting with a letter. | `string` | n/a | yes |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to all created resources. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID in which all resources are created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | GCP region in which the Cloud Run job and Cloud Scheduler job are created, e.g. "us-central1". | `string` | n/a | yes |
 | <a name="input_schedule"></a> [schedule](#input\_schedule) | Cron schedule expression for how often to trigger the backup job (e.g. weekly on Mondays at 09:00 UTC). | `string` | n/a | yes |
+| <a name="input_timeout"></a> [timeout](#input\_timeout) | Execution timeout for the backup job, e.g. "3600s". Cloud Run Jobs default to 600s if unset, which may be too short for large Bigtable backups; raise it further for larger tables (max 24h). | `string` | `"3600s"` | no |
 | <a name="input_vpc_access"></a> [vpc\_access](#input\_vpc\_access) | VPC Access connector configuration for the Cloud Run job. Set connector to a VPC Access Connector resource ID (e.g. projects/PROJECT/locations/REGION/connectors/NAME) to route job traffic through your VPC. Recommended for production workloads where Bigtable is accessed via Private Service Connect or VPC Service Controls. | <pre>object({<br/>    connector = string<br/>    egress    = optional(string, "ALL_TRAFFIC")<br/>  })</pre> | `null` | no |
 
 ## Outputs
@@ -92,13 +98,15 @@ No modules.
 The Terraform resource required is:
 
 ```golang
-
+# apply role
 resource "google_project_iam_custom_role" "terraform_pike" {
   project     = "pike-477416"
   role_id     = "terraform_pike"
   title       = "terraform_pike"
   description = "A user with least privileges"
   permissions = [
+    "cloudkms.cryptoKeys.getIamPolicy",
+    "cloudkms.cryptoKeys.setIamPolicy",
     "cloudscheduler.jobs.create",
     "cloudscheduler.jobs.delete",
     "cloudscheduler.jobs.enable",
@@ -108,12 +116,31 @@ resource "google_project_iam_custom_role" "terraform_pike" {
     "iam.serviceAccounts.delete",
     "iam.serviceAccounts.get",
     "iam.serviceAccounts.update",
+    "resourcemanager.projects.get",
     "run.jobs.create",
     "run.jobs.delete",
     "run.jobs.get",
     "run.jobs.getIamPolicy",
     "run.jobs.setIamPolicy",
     "run.jobs.update",
+    "run.operations.get"
+  ]
+}
+
+# plan role
+resource "google_project_iam_custom_role" "terraform_pike_plan" {
+  project     = "pike-477416"
+  role_id     = "terraform_pike_plan"
+  title       = "terraform_pike_plan"
+  description = "A user with least privileges"
+  permissions = [
+    "cloudkms.cryptoKeys.getIamPolicy",
+    "cloudscheduler.jobs.get",
+    "iam.serviceAccounts.get",
+    "resourcemanager.organizations.get",
+    "resourcemanager.projects.get",
+    "run.jobs.get",
+    "run.jobs.getIamPolicy",
     "run.operations.get"
   ]
 }
