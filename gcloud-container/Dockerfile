@@ -7,7 +7,7 @@ ENV project=${project}
 RUN groupadd -r app && useradd -r -g app app
 
 # add script, ensure executable and set ownership
-ADD script.sh /data/script.sh
+COPY script.sh /data/script.sh
 RUN mkdir -p /data && chown -R app:app /data && chmod +x /data/script.sh
 
 USER app

@@ -42,4 +42,6 @@ resource "google_cloud_run_v2_job" "default" {
       launch_stage,
     ]
   }
+
+  depends_on = [google_kms_crypto_key_iam_member.cloud_run_cmek]
 }

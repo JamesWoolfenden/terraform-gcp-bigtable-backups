@@ -42,16 +42,13 @@ gcloud builds submit --region=us-central1 --config cloudbuild.yaml --project you
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
-| Name | Version |
-| ---- | ------- |
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | 7.42.0 |
+No requirements.
 
 ## Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_google"></a> [google](#provider\_google) | 7.42.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | n/a |
 
 ## Modules
 
@@ -61,13 +58,13 @@ No modules.
 
 | Name | Type |
 | ---- | ---- |
-| [google_cloud_run_v2_job.default](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/cloud_run_v2_job) | resource |
-| [google_cloud_run_v2_job_iam_member.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/cloud_run_v2_job_iam_member) | resource |
-| [google_cloud_scheduler_job.backup](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/cloud_scheduler_job) | resource |
-| [google_kms_crypto_key_iam_member.cloud_run_cmek](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/kms_crypto_key_iam_member) | resource |
-| [google_service_account.backup_job](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/service_account) | resource |
-| [google_service_account.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/resources/service_account) | resource |
-| [google_project.current](https://registry.terraform.io/providers/hashicorp/google/7.42.0/docs/data-sources/project) | data source |
+| [google_cloud_run_v2_job.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_v2_job) | resource |
+| [google_cloud_run_v2_job_iam_member.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_run_v2_job_iam_member) | resource |
+| [google_cloud_scheduler_job.backup](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloud_scheduler_job) | resource |
+| [google_kms_crypto_key_iam_member.cloud_run_cmek](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/kms_crypto_key_iam_member) | resource |
+| [google_service_account.backup_job](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
+| [google_service_account.scheduler_invoker](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/service_account) | resource |
+| [google_project.current](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
 
@@ -137,7 +134,6 @@ resource "google_project_iam_custom_role" "terraform_pike_plan" {
     "cloudkms.cryptoKeys.getIamPolicy",
     "cloudscheduler.jobs.get",
     "iam.serviceAccounts.get",
-    "resourcemanager.organizations.get",
     "resourcemanager.projects.get",
     "run.jobs.get",
     "run.jobs.getIamPolicy",
