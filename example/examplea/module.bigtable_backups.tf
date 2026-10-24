@@ -19,9 +19,10 @@ resource "google_kms_key_ring" "backups" {
 
 
 resource "google_kms_crypto_key" "backups" {
-  name            = "backups-key"
-  key_ring        = google_kms_key_ring.backups.id
-  rotation_period = "7776000s" # 90 days; GCP requires > 24h (86400s)
+  name                       = "backups-key"
+  key_ring                   = google_kms_key_ring.backups.id
+  rotation_period            = "7776000s" # 90 days; GCP requires > 24h (86400s)
+  destroy_scheduled_duration = "604800s"  # 7 days; GCP minimum is 7 days
 
   lifecycle {
     prevent_destroy = true
