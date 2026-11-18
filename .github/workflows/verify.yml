@@ -18,5 +18,3 @@ jobs:
   # holden:ignore:HLD_CI_017 — intentionally tracks the latest shared workflow from our own org
   verify:
     uses: JamesWoolfenden/.github/.github/workflows/terraform-verify-gcp.yml@main
-    with:
-      service_account: terraform-gcp-bigtable-backups@pike-477416.iam.gserviceaccount.com
