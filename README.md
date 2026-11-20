@@ -69,9 +69,12 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
-| <a name="input_encryption_key"></a> [encryption\_key](#input\_encryption\_key) | Customer-managed encryption key (CMEK) resource name, e.g. projects/my-project/locations/global/keyRings/my-kr/cryptoKeys/my-key | `string` | n/a | yes |
-| <a name="input_image"></a> [image](#input\_image) | Container image URL for the backup job, e.g. "us-central1-docker.pkg.dev/my-project/my-repo/backup:v1.0.0". | `string` | n/a | yes |
-| <a name="input_job_name"></a> [job\_name](#input\_job\_name) | Name of the Cloud Run v2 job. Used as a prefix for derived resource names (service accounts). Must be 1-26 characters, lowercase letters, digits or hyphens, starting with a letter. | `string` | n/a | yes |
+| <a name="input_cpu"></a> [cpu](#input\_cpu) | CPU limit for the backup job container, e.g. "1000m" or "2". | `string` | `"1000m"` | no |
+| <a name="input_encryption_key"></a> [encryption\_key](#input\_encryption\_key) | Customer-managed encryption key (CMEK) resource name for the job's container instances, e.g. projects/my-project/locations/us-central1/keyRings/my-kr/cryptoKeys/my-key. The module grants the Cloud Run service agent roles/cloudkms.cryptoKeyEncrypterDecrypter on this key. | `string` | n/a | yes |
+| <a name="input_environment_variables"></a> [environment\_variables](#input\_environment\_variables) | Extra environment variables for the backup container, e.g. { BIGTABLE\_INSTANCE = "my-instance", BIGTABLE\_CLUSTER = "my-cluster", BIGTABLE\_TABLE = "my-table" } for the bundled gcloud-container script. Do not put secrets here; values are stored in plain text in the job spec and state. | `map(string)` | `{}` | no |
+| <a name="input_image"></a> [image](#input\_image) | Container image for the backup job, pinned by digest (preferred), e.g. "us-central1-docker.pkg.dev/my-project/my-repo/backup@sha256:<64-hex>", or by an explicit non-latest tag, e.g. "...backup:v1.0.0". Untagged references resolve to :latest and are rejected. | `string` | n/a | yes |
+| <a name="input_job_name"></a> [job\_name](#input\_job\_name) | Name of the Cloud Run v2 job. Used as a prefix for derived resource names (service accounts). Must be 2-26 characters, lowercase letters, digits or hyphens, starting with a letter and ending with a letter or digit. | `string` | n/a | yes |
+| <a name="input_memory"></a> [memory](#input\_memory) | Memory limit for the backup job container, e.g. "512Mi" or "1Gi". | `string` | `"512Mi"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID in which all resources are created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | GCP region in which the Cloud Run job and Cloud Scheduler job are created, e.g. "us-central1". | `string` | n/a | yes |
 | <a name="input_schedule"></a> [schedule](#input\_schedule) | Cron schedule expression for how often to trigger the backup job (e.g. weekly on Mondays at 09:00 UTC). | `string` | n/a | yes |

@@ -1,30 +1,32 @@
 #!/usr/bin/env bash
-# Copyright 2020 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 ##
 # script.sh
-# Uses gcloud to create a report of Cloud Run services.
-# Uses gsutil to write the report to Cloud Storage.
+# Creates an on-demand Cloud Bigtable backup. Edit to suit, or drive it entirely
+# through environment variables set on the Cloud Run job (the module's
+# environment_variables input):
 #
-# Requires GCLOUD_REPORT_BUCKET environment variable
+#   project              GCP project (set by the module; or pass as $1)
+#   BIGTABLE_INSTANCE    Bigtable instance ID (required)
+#   BIGTABLE_CLUSTER     Bigtable cluster ID (required)
+#   BIGTABLE_TABLE       Table to back up (required)
+#   BACKUP_RETENTION     Retention period, default 7d
 ##
+set -euo pipefail
 
-# [START cloudrun_report_script]
-set -eo pipefail
+PROJECT="${1:-${project:-}}"
+: "${PROJECT:?project must be set via the project env var or as the first argument}"
+: "${BIGTABLE_INSTANCE:?BIGTABLE_INSTANCE must be set}"
+: "${BIGTABLE_CLUSTER:?BIGTABLE_CLUSTER must be set}"
+: "${BIGTABLE_TABLE:?BIGTABLE_TABLE must be set}"
+RETENTION="${BACKUP_RETENTION:-7d}"
 
+# Timestamped, sortable and unique per run; table prefix truncated to keep the
+# ID within Bigtable's 50-character limit.
+BACKUP_ID="${BIGTABLE_TABLE:0:30}-$(date -u +%Y%m%d-%H%M%S)"
 
-# Write a report containing the service name, service URL, service account or user that
-# deployed it, and any explicitly configured service "limits" such as CPU or Memory.
-gcloud bigtable backups create "${RANDOM}" --instance=yourinstance --cluster=yourcluster --table=example --retention-period=7d --project "${1}"
+gcloud bigtable backups create "${BACKUP_ID}" \
+  --instance="${BIGTABLE_INSTANCE}" \
+  --cluster="${BIGTABLE_CLUSTER}" \
+  --table="${BIGTABLE_TABLE}" \
+  --retention-period="${RETENTION}" \
+  --project "${PROJECT}"

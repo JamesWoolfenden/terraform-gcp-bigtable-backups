@@ -1,8 +1,8 @@
 # holden:ignore:HLD_GCP_176 — vpc_access is optional; callers without a VPC connector use Google's private network for Bigtable access
 resource "google_cloud_run_v2_job" "default" {
+  project  = var.project_id
   name     = var.job_name
   location = var.region
-  client   = "cloud-console"
 
   template {
     template {
@@ -13,7 +13,7 @@ resource "google_cloud_run_v2_job" "default" {
       encryption_key = var.encryption_key
 
       dynamic "vpc_access" {
-        for_each = var.vpc_access != null ? [var.vpc_access] : []
+        for_each = local.vpc_access
         content {
           connector = vpc_access.value.connector
           egress    = vpc_access.value.egress
@@ -23,14 +23,18 @@ resource "google_cloud_run_v2_job" "default" {
       containers {
         # Image must be pinned by digest (image@sha256:<64-hex>) for Cloud Run v2
         image = var.image
-        env {
-          name  = "project"
-          value = var.project_id
+        dynamic "env" {
+          for_each = local.container_env
+          content {
+            name  = env.key
+            value = env.value
+          }
         }
+
         resources {
           limits = {
-            "cpu"    = "1000m"
-            "memory" = "512Mi"
+            "cpu"    = var.cpu
+            "memory" = var.memory
           }
         }
       }

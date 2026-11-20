@@ -21,21 +21,21 @@ variable "project_id" {
 
 variable "image" {
   type        = string
-  description = "Container image URL for the backup job, e.g. \"us-central1-docker.pkg.dev/my-project/my-repo/backup:v1.0.0\"."
+  description = "Container image for the backup job, pinned by digest (preferred), e.g. \"us-central1-docker.pkg.dev/my-project/my-repo/backup@sha256:<64-hex>\", or by an explicit non-latest tag, e.g. \"...backup:v1.0.0\". Untagged references resolve to :latest and are rejected."
 
   validation {
-    condition     = length(trimspace(var.image)) > 0 && !endswith(var.image, ":latest")
-    error_message = "image must not be empty and must not use the mutable :latest tag — pin to a specific version tag or digest."
+    condition     = can(regex("@sha256:[a-f0-9]{64}$", var.image)) || (can(regex(":[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", element(split("/", var.image), length(split("/", var.image)) - 1))) && !endswith(var.image, ":latest"))
+    error_message = "image must be pinned by digest (@sha256:<64-hex>) or carry an explicit tag other than :latest; untagged references resolve to the mutable :latest tag."
   }
 }
 
 variable "job_name" {
   type        = string
-  description = "Name of the Cloud Run v2 job. Used as a prefix for derived resource names (service accounts). Must be 1-26 characters, lowercase letters, digits or hyphens, starting with a letter."
+  description = "Name of the Cloud Run v2 job. Used as a prefix for derived resource names (service accounts). Must be 2-26 characters, lowercase letters, digits or hyphens, starting with a letter and ending with a letter or digit."
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{0,25}$", var.job_name))
-    error_message = "job_name must be 1-26 characters, start with a lowercase letter, and contain only lowercase letters, digits or hyphens."
+    condition     = can(regex("^[a-z][a-z0-9-]{0,24}[a-z0-9]$", var.job_name))
+    error_message = "job_name must be 2-26 characters, start with a lowercase letter, end with a letter or digit, and contain only lowercase letters, digits or hyphens (the derived service account IDs need at least 6 characters)."
   }
 }
 
@@ -76,11 +76,43 @@ variable "timeout" {
 
 variable "encryption_key" {
   type        = string
-  description = "Customer-managed encryption key (CMEK) resource name, e.g. projects/my-project/locations/global/keyRings/my-kr/cryptoKeys/my-key"
-  sensitive   = true
+  description = "Customer-managed encryption key (CMEK) resource name for the job's container instances, e.g. projects/my-project/locations/us-central1/keyRings/my-kr/cryptoKeys/my-key. The module grants the Cloud Run service agent roles/cloudkms.cryptoKeyEncrypterDecrypter on this key."
 
   validation {
-    condition     = length(trimspace(var.encryption_key)) > 0
-    error_message = "encryption_key must not be empty when set. Provide a full KMS resource name for CMEK."
+    condition     = can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$", var.encryption_key))
+    error_message = "encryption_key must be a full KMS key resource name: projects/PROJECT/locations/LOCATION/keyRings/RING/cryptoKeys/KEY."
+  }
+}
+
+variable "cpu" {
+  type        = string
+  description = "CPU limit for the backup job container, e.g. \"1000m\" or \"2\"."
+  default     = "1000m"
+
+  validation {
+    condition     = can(regex("^([0-9]+m|[0-9]+(\\.[0-9]+)?)$", var.cpu))
+    error_message = "cpu must be a Kubernetes-style CPU quantity, e.g. \"1000m\", \"1\" or \"2\"."
+  }
+}
+
+variable "memory" {
+  type        = string
+  description = "Memory limit for the backup job container, e.g. \"512Mi\" or \"1Gi\"."
+  default     = "512Mi"
+
+  validation {
+    condition     = can(regex("^[0-9]+(Mi|Gi)$", var.memory))
+    error_message = "memory must be a quantity in Mi or Gi, e.g. \"512Mi\" or \"1Gi\"."
+  }
+}
+
+variable "environment_variables" {
+  type        = map(string)
+  description = "Extra environment variables for the backup container, e.g. { BIGTABLE_INSTANCE = \"my-instance\", BIGTABLE_CLUSTER = \"my-cluster\", BIGTABLE_TABLE = \"my-table\" } for the bundled gcloud-container script. Do not put secrets here; values are stored in plain text in the job spec and state."
+  default     = {}
+
+  validation {
+    condition     = alltrue([for k in keys(var.environment_variables) : can(regex("^[A-Za-z_][A-Za-z0-9_]*$", k)) && k != "project"])
+    error_message = "environment_variables keys must be valid environment variable names and must not be \"project\" (set by the module)."
   }
 }

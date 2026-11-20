@@ -63,10 +63,10 @@
       "remediation": "Replace the oidc_token block with oauth_token { service_account_email = google_service_account.scheduler_invoker.email, scope = \"https://www.googleapis.com/auth/cloud-platform\" }.",
       "resource": "google_cloud_scheduler_job.backup",
       "severity": "MEDIUM",
-      "status": "open",
+      "status": "fixed",
       "suppression_reason": null,
       "title": "Cloud Scheduler calls the Cloud Run Admin API with an OIDC token; googleapis.com endpoints only accept OAuth access tokens",
-      "unresolved_since": "2026-11-20"
+      "unresolved_since": null
     },
     {
       "confidence": "high",
@@ -88,10 +88,10 @@
       "remediation": "Set project = var.project_id on google_cloud_run_v2_job.default and google_cloud_scheduler_job.backup, and build the scheduler URI from the job resource's attributes.",
       "resource": "google_cloud_run_v2_job.default",
       "severity": "MEDIUM",
-      "status": "open",
+      "status": "fixed",
       "suppression_reason": null,
       "title": "Cloud Run job and scheduler take their project from the provider while every related resource uses var.project_id",
-      "unresolved_since": "2026-11-20"
+      "unresolved_since": null
     },
     {
       "confidence": "high",
@@ -110,10 +110,10 @@
       "remediation": "Use ENTRYPOINT [\"/data/script.sh\"] and have script.sh read the project from the environment (falling back to $1).",
       "resource": "gcloud-container/Dockerfile",
       "severity": "MEDIUM",
-      "status": "open",
+      "status": "fixed",
       "suppression_reason": null,
       "title": "Dockerfile exec-form ENTRYPOINT passes the literal string ${project} to the backup script",
-      "unresolved_since": "2026-11-20"
+      "unresolved_since": null
     },
     {
       "confidence": "high",
@@ -133,10 +133,10 @@
       "remediation": "Tighten to ^[a-z][a-z0-9-]{0,24}[a-z0-9]$ (2-26 chars, must end with a letter or digit).",
       "resource": "variable.job_name",
       "severity": "LOW",
-      "status": "open",
+      "status": "fixed",
       "suppression_reason": null,
       "title": "job_name validation accepts values that make the derived service account IDs or Cloud Run name invalid",
-      "unresolved_since": "2026-11-20"
+      "unresolved_since": null
     },
     {
       "confidence": "high",
@@ -154,10 +154,10 @@
       "remediation": "Require either a digest (@sha256:<64 hex>) or an explicit tag that is not latest.",
       "resource": "variable.image",
       "severity": "LOW",
-      "status": "open",
+      "status": "fixed",
       "suppression_reason": null,
       "title": "image validation accepts untagged references, which resolve to the mutable :latest tag it is meant to forbid",
-      "unresolved_since": "2026-11-20"
+      "unresolved_since": null
     },
     {
       "confidence": "high",
@@ -177,10 +177,10 @@
       "remediation": "Drop sensitive = true from encryption_key and from the job/scheduler outputs; fix the error message.",
       "resource": "variable.encryption_key",
       "severity": "LOW",
-      "status": "open",
+      "status": "fixed",
       "suppression_reason": null,
       "title": "encryption_key is marked sensitive although it is a KMS resource name, which taints the job and scheduler outputs",
-      "unresolved_since": "2026-11-20"
+      "unresolved_since": null
     },
     {
       "confidence": "high",
@@ -195,10 +195,10 @@
       "remediation": "Add cpu and memory variables (defaulting to the current values) and remove the client argument.",
       "resource": "google_cloud_run_v2_job.default",
       "severity": "LOW",
-      "status": "open",
+      "status": "fixed",
       "suppression_reason": null,
       "title": "Container CPU/memory limits are hardcoded and the job claims client = \"cloud-console\"",
-      "unresolved_since": "2026-11-20"
+      "unresolved_since": null
     },
     {
       "confidence": "high",
@@ -216,10 +216,10 @@
       "remediation": "Read BIGTABLE_INSTANCE/CLUSTER/TABLE/RETENTION from the environment, use a timestamped backup ID, and add an environment_variables map input to the module.",
       "resource": "gcloud-container/script.sh",
       "severity": "LOW",
-      "status": "open",
+      "status": "fixed",
       "suppression_reason": null,
       "title": "Backup script uses $RANDOM for backup IDs and hardcoded placeholder instance/cluster/table with no module input to set them",
-      "unresolved_since": "2026-11-20"
+      "unresolved_since": null
     },
     {
       "confidence": "high",
@@ -238,10 +238,10 @@
       "remediation": "Set project = \"pike-477416\" on the example's provider block (or a local shared with the module call).",
       "resource": "provider.google",
       "severity": "LOW",
-      "status": "open",
+      "status": "fixed",
       "suppression_reason": null,
       "title": "Example creates its KMS key ring in the ambient project while passing an explicit project_id to the module",
-      "unresolved_since": "2026-11-20"
+      "unresolved_since": null
     }
   ],
   "scan_date": "2026-11-20T00:00:00Z",
