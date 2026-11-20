@@ -1,4 +1,5 @@
 {
+  "category": "all",
   "findings": [
     {
       "confidence": "high",
@@ -20,7 +21,7 @@
       "status": "fixed",
       "suppression_reason": null,
       "title": "CMEK is configured on the Cloud Run job but nothing grants the Cloud Run service agent access to the key",
-      "unresolved_since": "2026-07-30"
+      "unresolved_since": null
     },
     {
       "confidence": "high",
@@ -43,17 +44,215 @@
       "status": "fixed",
       "suppression_reason": null,
       "title": "cloudbuild.yaml only ever produces a :latest tag, which the module's own image variable explicitly forbids",
-      "unresolved_since": "2026-07-30"
+      "unresolved_since": null
+    },
+    {
+      "confidence": "high",
+      "explanation": "http_target.uri is the Cloud Run Admin API (https://REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/PROJECT/jobs/JOB:run), not a Cloud Run service URL. Google APIs on *.googleapis.com authenticate OAuth 2.0 access tokens; an OIDC ID token (oidc_token) is only valid for endpoints that verify ID tokens, such as a Cloud Run service's own run.app URL. Google's documented pattern for scheduling a Cloud Run job uses oauth_token. As written, every scheduled run is rejected with 401 and the backup never executes, while plan/apply succeed. The deterministic engine passes it (HLD_GCP_201 only checks that some token block exists; HLD_GCP_266/HLD_GCP_201 remediation text even recommends oidc_token for Cloud Run). Principle is a best fit: apply succeeds but the workload silently never runs.",
+      "file": "google_cloud_scheduler.tf",
+      "first_seen": "2026-11-20",
+      "fix": "oauth_token {\n  service_account_email = google_service_account.scheduler_invoker.email\n  scope                 = \"https://www.googleapis.com/auth/cloud-platform\"\n}",
+      "fixable": true,
+      "id": "HOLDEN_AI_003",
+      "last_seen": "2026-11-20",
+      "line": 1,
+      "principle": "reliability",
+      "related_resources": [
+        "google_cloud_run_v2_job_iam_member.scheduler_invoker"
+      ],
+      "remediation": "Replace the oidc_token block with oauth_token { service_account_email = google_service_account.scheduler_invoker.email, scope = \"https://www.googleapis.com/auth/cloud-platform\" }.",
+      "resource": "google_cloud_scheduler_job.backup",
+      "severity": "MEDIUM",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "Cloud Scheduler calls the Cloud Run Admin API with an OIDC token; googleapis.com endpoints only accept OAuth access tokens",
+      "unresolved_since": "2026-11-20"
+    },
+    {
+      "confidence": "high",
+      "explanation": "The service accounts, the job IAM member, the CMEK grant (via data.google_project.current) and the scheduler's target URI are all built from var.project_id, but google_cloud_run_v2_job.default and google_cloud_scheduler_job.backup set no project and fall back to the provider/ambient project. When the caller's provider project differs from project_id the job is created in one project, its IAM binding and the scheduler URI point at another, and the job's service account lives in a third-party project from the job's point of view, so apply fails or the schedule targets a non-existent job.",
+      "file": "google_cloud_run_v2_job.tf",
+      "first_seen": "2026-11-20",
+      "fix": "project = var.project_id",
+      "fixable": true,
+      "id": "HOLDEN_AI_004",
+      "last_seen": "2026-11-20",
+      "line": 2,
+      "principle": "reliability",
+      "related_resources": [
+        "google_cloud_scheduler_job.backup",
+        "google_service_account.backup_job",
+        "google_cloud_run_v2_job_iam_member.scheduler_invoker",
+        "data.google_project.current"
+      ],
+      "remediation": "Set project = var.project_id on google_cloud_run_v2_job.default and google_cloud_scheduler_job.backup, and build the scheduler URI from the job resource's attributes.",
+      "resource": "google_cloud_run_v2_job.default",
+      "severity": "MEDIUM",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "Cloud Run job and scheduler take their project from the provider while every related resource uses var.project_id",
+      "unresolved_since": "2026-11-20"
+    },
+    {
+      "confidence": "high",
+      "explanation": "ENTRYPOINT [\"/data/script.sh\", \"${project}\"] is exec form, which performs no shell variable expansion, so script.sh receives the literal text ${project} as $1 and runs gcloud ... --project \"${project}\", which fails. The module correctly injects a project env var into the container, but the image never reads it. Any user following gcloud-container/Readme.md gets a job that fails on every execution.",
+      "file": "gcloud-container/Dockerfile",
+      "first_seen": "2026-11-20",
+      "fixable": false,
+      "id": "HOLDEN_AI_005",
+      "last_seen": "2026-11-20",
+      "line": 15,
+      "principle": "reliability",
+      "related_resources": [
+        "gcloud-container/script.sh",
+        "google_cloud_run_v2_job.default (env project)"
+      ],
+      "remediation": "Use ENTRYPOINT [\"/data/script.sh\"] and have script.sh read the project from the environment (falling back to $1).",
+      "resource": "gcloud-container/Dockerfile",
+      "severity": "MEDIUM",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "Dockerfile exec-form ENTRYPOINT passes the literal string ${project} to the backup script",
+      "unresolved_since": "2026-11-20"
+    },
+    {
+      "confidence": "high",
+      "explanation": "The regex ^[a-z][a-z0-9-]{0,25}$ allows a 1-character name, which makes account_id \"x-job\"/\"x-sch\" 5 characters, below the 6-character minimum for service account IDs, and allows a trailing hyphen, which Cloud Run job names reject. Both pass validation and fail at apply.",
+      "file": "variables.tf",
+      "first_seen": "2026-11-20",
+      "fix": "condition     = can(regex(\"^[a-z][a-z0-9-]{0,24}[a-z0-9]$\", var.job_name))",
+      "fixable": true,
+      "id": "HOLDEN_AI_006",
+      "last_seen": "2026-11-20",
+      "line": 32,
+      "principle": "reliability",
+      "related_resources": [
+        "google_service_account.backup_job",
+        "google_service_account.scheduler_invoker"
+      ],
+      "remediation": "Tighten to ^[a-z][a-z0-9-]{0,24}[a-z0-9]$ (2-26 chars, must end with a letter or digit).",
+      "resource": "variable.job_name",
+      "severity": "LOW",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "job_name validation accepts values that make the derived service account IDs or Cloud Run name invalid",
+      "unresolved_since": "2026-11-20"
+    },
+    {
+      "confidence": "high",
+      "explanation": "The validation only rejects values ending in \":latest\". A reference with no tag or digest (e.g. us-central1-docker.pkg.dev/p/r/backup) is pulled as :latest by Cloud Run, so the guard is trivially bypassed. HLD_GCP_265 has the same gap because it matches on the literal suffix.",
+      "file": "variables.tf",
+      "first_seen": "2026-11-20",
+      "fixable": false,
+      "id": "HOLDEN_AI_007",
+      "last_seen": "2026-11-20",
+      "line": 22,
+      "principle": "supply-chain",
+      "related_resources": [
+        "google_cloud_run_v2_job.default"
+      ],
+      "remediation": "Require either a digest (@sha256:<64 hex>) or an explicit tag that is not latest.",
+      "resource": "variable.image",
+      "severity": "LOW",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "image validation accepts untagged references, which resolve to the mutable :latest tag it is meant to forbid",
+      "unresolved_since": "2026-11-20"
+    },
+    {
+      "confidence": "high",
+      "explanation": "A KMS key resource name is an identifier, not a secret. Marking it sensitive redacts it in plans (hiding key changes reviewers should see) and forces the job and scheduler outputs, and the example's module output, to be sensitive. The validation message also says 'when set' though the variable is required.",
+      "file": "variables.tf",
+      "first_seen": "2026-11-20",
+      "fixable": false,
+      "id": "HOLDEN_AI_008",
+      "last_seen": "2026-11-20",
+      "line": 77,
+      "principle": "maintainability",
+      "related_resources": [
+        "output.job",
+        "output.scheduler",
+        "example/examplea/outputs.tf"
+      ],
+      "remediation": "Drop sensitive = true from encryption_key and from the job/scheduler outputs; fix the error message.",
+      "resource": "variable.encryption_key",
+      "severity": "LOW",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "encryption_key is marked sensitive although it is a KMS resource name, which taints the job and scheduler outputs",
+      "unresolved_since": "2026-11-20"
+    },
+    {
+      "confidence": "high",
+      "explanation": "resources.limits is fixed at 1000m/512Mi with no way for callers to size the job for their workload, and client = \"cloud-console\" misattributes a Terraform-managed job to the Cloud Console in audit metadata. Both are literals that should be inputs (or removed).",
+      "file": "google_cloud_run_v2_job.tf",
+      "first_seen": "2026-11-20",
+      "fixable": false,
+      "id": "HOLDEN_AI_009",
+      "last_seen": "2026-11-20",
+      "line": 2,
+      "principle": "maintainability",
+      "remediation": "Add cpu and memory variables (defaulting to the current values) and remove the client argument.",
+      "resource": "google_cloud_run_v2_job.default",
+      "severity": "LOW",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "Container CPU/memory limits are hardcoded and the job claims client = \"cloud-console\"",
+      "unresolved_since": "2026-11-20"
+    },
+    {
+      "confidence": "high",
+      "explanation": "${RANDOM} gives only 32768 IDs, so backups collide over time and gcloud fails with ALREADY_EXISTS; it also gives no ordering. instance/cluster/table are literal placeholders and the module has no way to pass configuration into the container other than the project, so every user must fork the script. The header comments still describe an unrelated Cloud Run report script.",
+      "file": "gcloud-container/script.sh",
+      "first_seen": "2026-11-20",
+      "fixable": false,
+      "id": "HOLDEN_AI_010",
+      "last_seen": "2026-11-20",
+      "line": 30,
+      "principle": "reliability",
+      "related_resources": [
+        "google_cloud_run_v2_job.default"
+      ],
+      "remediation": "Read BIGTABLE_INSTANCE/CLUSTER/TABLE/RETENTION from the environment, use a timestamped backup ID, and add an environment_variables map input to the module.",
+      "resource": "gcloud-container/script.sh",
+      "severity": "LOW",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "Backup script uses $RANDOM for backup IDs and hardcoded placeholder instance/cluster/table with no module input to set them",
+      "unresolved_since": "2026-11-20"
+    },
+    {
+      "confidence": "high",
+      "explanation": "The example's provider sets no project, so google_kms_key_ring.backups and google_kms_crypto_key.backups land in whatever project gcloud/GOOGLE_PROJECT points at, while the module is told project_id = pike-477416. On a machine with a different default project the key is created elsewhere and the CMEK grant/job reference a key in another project.",
+      "file": "example/examplea/provider.google.tf",
+      "first_seen": "2026-11-20",
+      "fix": "project = \"pike-477416\"",
+      "fixable": true,
+      "id": "HOLDEN_AI_011",
+      "last_seen": "2026-11-20",
+      "line": 3,
+      "principle": "repeatability",
+      "related_resources": [
+        "example/examplea/module.bigtable_backups.tf (google_kms_key_ring.backups)"
+      ],
+      "remediation": "Set project = \"pike-477416\" on the example's provider block (or a local shared with the module call).",
+      "resource": "provider.google",
+      "severity": "LOW",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "Example creates its KMS key ring in the ambient project while passing an explicit project_id to the module",
+      "unresolved_since": "2026-11-20"
     }
   ],
-  "scan_date": "2026-07-30T00:00:00Z",
+  "scan_date": "2026-11-20T00:00:00Z",
   "scan_path": ".",
   "suggested_policies": [
     {
-      "dsl_extension_note": "checkCompanion's linked_via branch (internal/policy/evaluator.go ~line 1114) bails to Unknown whenever either side's resolved value is graph.DynamicValue (the __holden_dynamic__ sentinel), which is what any single-reference attribute expression (e.g. google_kms_crypto_key.run.id, or google_pubsub_topic.x.id in the existing HLD_GCP_280) resolves to today. Implemented primitive: when GetFromMap returns DynamicValue for a linked_via from/to path, fall back to resolving via g.Edges \u2014 find the outbound edge from the subject resource whose Attr matches the from path to get its target resource ID, do the same for the companion's to path, and compare target resource IDs instead of raw values. This reuses the existing edge-based matching already implemented in the non-linked_via branch of checkCompanion/checkForbidsCompanion, so it's additive rather than a new mechanism. Verified empirically before implementing: a controlled fixture with google_cloud_run_v2_job.encryption_key and a matching google_kms_crypto_key_iam_member.crypto_key_id, both referencing the same google_kms_crypto_key via .id, produced zero findings (not Pass, not Fail) for both the proposed HLD_PROPOSED_007 and, when reproduced with google_pubsub_subscription/google_pubsub_topic_iam_member, for the existing shipped HLD_GCP_280 \u2014 confirming this was a pre-existing engine gap, not specific to the new policy. Implemented in internal/policy/evaluator.go (resolveEdgeTarget helper + checkCompanion/checkForbidsCompanion linked_via fallback), covered by a new evaluator-level unit test plus per-policy fixtures for HLD_PROPOSED_007 and a regression fixture confirming HLD_GCP_280 now fires correctly too.",
-      "rationale": "Cloud Run v2 jobs/services that set encryption_key silently fail to deploy unless the Cloud Run service agent separately holds roles/cloudkms.cryptoKeyEncrypterDecrypter on that exact key \u2014 exactly the same failure shape holden already models for Pub/Sub dead-letter topics (HLD_GCP_280). coverage_by_type[google_cloud_run_v2_job] has no policy checking for this companion grant (only presence-of-encryption_key, via HLD_GCP_363). The blocker isn't the DSL shape \u2014 filter + requires_companion + linked_via is the right, already-used pattern (see HLD_GCP_280) \u2014 it's that linked_via's value-join can't match when both sides are resource-reference expressions (google_kms_crypto_key.x.id): holden's graph resolves single-reference attribute expressions to the sentinel __holden_dynamic__ rather than a comparable value, so checkCompanion's linked_via branch returns Unknown before comparison for any realistic config (verified empirically against this exact policy pattern; HLD_GCP_280 itself has no test and would silently no-op the same way on any config using a resource reference for dead_letter_topic/topic, which is the normal case).",
-      "requires_dsl_extension": true,
-      "yaml": "id: HLD_PROPOSED_007\nname: Cloud Run v2 jobs and services using CMEK must grant the Cloud Run service agent key access\nprinciple: encryption\nseverity: HIGH\nrationale: |\n  Setting encryption_key on a google_cloud_run_v2_job or google_cloud_run_v2_service's\n  execution environment only tells Cloud Run which CMEK to use, it doesn't grant\n  access to it. Google requires the Cloud Run service agent\n  (service-PROJECT_NUMBER@serverless-robot-prod.iam.gserviceaccount.com) to\n  hold roles/cloudkms.cryptoKeyEncrypterDecrypter on that key before the job\n  or service can be created or executed. Without a matching\n  google_kms_crypto_key_iam_member (or _binding) granting that role on the\n  same key, deployment or execution fails, and nothing on the\n  google_cloud_run_v2_job/google_cloud_run_v2_service resource itself surfaces\n  the missing prerequisite.\nremediation: |\n  Grant the Cloud Run service agent access to the key referenced:\n\n    data \"google_project\" \"current\" {}\n\n    resource \"google_kms_crypto_key_iam_member\" \"cloud_run_cmek\" {\n      crypto_key_id = google_kms_crypto_key.example.id\n      role          = \"roles/cloudkms.cryptoKeyEncrypterDecrypter\"\n      member        = \"serviceAccount:service-${data.google_project.current.number}@serverless-robot-prod.iam.gserviceaccount.com\"\n    }\nresources:\n  google_cloud_run_v2_job:\n    filter:\n      path: template.template.encryption_key\n      not_null: true\n    requires_companion:\n      type: google_kms_crypto_key_iam_member\n      linked_via:\n        from: template.template.encryption_key\n        to: crypto_key_id\n      where:\n        path: role\n        equals: roles/cloudkms.cryptoKeyEncrypterDecrypter\n  google_cloud_run_v2_service:\n    filter:\n      path: template.encryption_key\n      not_null: true\n    requires_companion:\n      type: google_kms_crypto_key_iam_member\n      linked_via:\n        from: template.encryption_key\n        to: crypto_key_id\n      where:\n        path: role\n        equals: roles/cloudkms.cryptoKeyEncrypterDecrypter\n"
+      "first_seen": "2026-11-20",
+      "last_seen": "2026-11-20",
+      "rationale": "A google_cloud_scheduler_job whose http_target.uri is a Google API (*.googleapis.com, e.g. the Cloud Run Admin API jobs/:run endpoint) must authenticate with an OAuth access token. An oidc_token is rejected with 401, so the schedule silently never runs while plan/apply succeed. Existing coverage (HLD_GCP_201/266/295) only checks that a token exists and who it is for, never that its type matches the target.",
+      "status": "installed",
+      "yaml": "id: LOCAL_GCP_001\nname: Cloud Scheduler jobs calling a googleapis.com endpoint must use oauth_token, not oidc_token\nprinciple: reliability\nseverity: MEDIUM\nrationale: |\n  Google APIs on *.googleapis.com (including the Cloud Run Admin API used to\n  run a Cloud Run job) only accept OAuth 2.0 access tokens. A scheduler job\n  that sends an OIDC ID token to such an endpoint gets 401 on every run, while\n  terraform plan and apply succeed.\nmessage: |\n  google_cloud_scheduler_job targets a googleapis.com URI but has no oauth_token block.\nremediation: |\n  Replace oidc_token with oauth_token:\n    http_target {\n      oauth_token {\n        service_account_email = google_service_account.scheduler.email\n        scope                 = \"https://www.googleapis.com/auth/cloud-platform\"\n      }\n    }\nresources:\n  google_cloud_scheduler_job:\n    filter:\n      path: http_target.uri\n      matches: \"\\\\.googleapis\\\\.com/\"\n    path: http_target.oauth_token\n    not_null: true\n"
     }
   ],
   "suggested_suppressions": []

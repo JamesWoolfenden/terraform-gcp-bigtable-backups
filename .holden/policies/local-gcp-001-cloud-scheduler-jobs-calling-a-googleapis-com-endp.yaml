@@ -1,0 +1,26 @@
+id: LOCAL_GCP_001
+name: Cloud Scheduler jobs calling a googleapis.com endpoint must use oauth_token, not oidc_token
+principle: reliability
+severity: MEDIUM
+rationale: |
+  Google APIs on *.googleapis.com (including the Cloud Run Admin API used to
+  run a Cloud Run job) only accept OAuth 2.0 access tokens. A scheduler job
+  that sends an OIDC ID token to such an endpoint gets 401 on every run, while
+  terraform plan and apply succeed.
+message: |
+  google_cloud_scheduler_job targets a googleapis.com URI but has no oauth_token block.
+remediation: |
+  Replace oidc_token with oauth_token:
+    http_target {
+      oauth_token {
+        service_account_email = google_service_account.scheduler.email
+        scope                 = "https://www.googleapis.com/auth/cloud-platform"
+      }
+    }
+resources:
+  google_cloud_scheduler_job:
+    filter:
+      path: http_target.uri
+      matches: "\\.googleapis\\.com/"
+    path: http_target.oauth_token
+    not_null: true

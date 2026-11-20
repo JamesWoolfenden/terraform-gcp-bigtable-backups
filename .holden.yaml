@@ -1,5 +1,5 @@
 policies:
-  - .holden\policies
+  - .holden/policies
 
 scan_roots:
   - path: .
